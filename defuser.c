@@ -21,21 +21,24 @@ static int write_answer(char *out, size_t cap, const uint32_t *values, size_t co
 
 int solve_phase_1(uint64_t challenge, char *out, size_t cap) {
     uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 0;
+    size_t count = 1;
 
     uint32_t res0 = (challenge + (challenge >> 32) * 8) ^ 0x6ea7;
     uint32_t res1 = ((challenge >> 16) + 0x3ea6) ^ (challenge >> 32);
     uint32_t res2 = (res1 * 3 + challenge) ^ 0xcae1;
-    values[count ++] = res2 ^ res0;
+    values[0] = res2 ^ res0;
 
     return write_answer(out, cap, values, count);
 }
 
 int solve_phase_2(uint64_t challenge, char *out, size_t cap) {
     uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 0;
-    (void)challenge;
-    // TODO: 根据 phase_02 的汇编，用 challenge 算出口令中的各个整数，依次存入 values，并把 count 改为整数个数。
+    size_t count = 6;
+
+    values[0] = ((challenge >> 13) & 0x3f) ^ 0x1d;
+    for (int i = 1; i < 6; i ++)
+        values[i] = (values[i - 1] * 3 - i) ^ (((challenge >> i) & 0x1f) + 6);
+
     return write_answer(out, cap, values, count);
 }
 

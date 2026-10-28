@@ -46,6 +46,47 @@
 
 在 `defuser` 还原该逻辑即可。
 
+#### Phase 2
+
+由 `phase_01.S` 可知 `defuser` 输出 6 个 u32。对汇编代码进行分析并注释（隐去输入 `out` 的部分）：
+
+```S
+  // ebx = 1
+  40215a:	mov    %r13,%rax // seed
+  40215d:	mov    -0x40(%rbp),%edx // out[0]
+  402160:	shr    $0xd,%rax
+  402164:	and    $0x3f,%eax
+  402167:	xor    $0x1d,%eax // res[0] = ((seed >> 13) & 0x3f) ^ 0x1d
+  40216a:	cmp    %eax,%edx // check res[0] == out[0]
+  40216c:	jne    402115 <phase_02+0x25> // return 0
+  40216e:	mov    $0x1,%ecx // 1
+
+  // for (int i = 1; i != 6; i ++) %rcx 为 i
+  402173:	mov    %r13,%rax // seed
+  402176:	lea    (%rdx,%rdx,2),%edx
+  402179:	shr    %cl,%rax
+  40217c:	sub    %ecx,%edx // edx = res[i-1] * 3 - i (此时 out[i-1] == res[i-1] 显然成立)
+  40217e:	and    $0x1f,%eax
+  402181:	add    $0x6,%eax // eax = ((seed >> i) & 0x1f) + 6
+  402184:	xor    %edx,%eax // res[i] = edx ^ eax = (res[i-1] * 3 - i) ^ (((seed >> i) & 0x1f) + 6)
+  402186:	mov    -0x40(%rbp,%rcx,4),%edx // out[i]
+  40218a:	cmp    %eax,%edx // check eax == out[i]
+  40218c:	jne    402115 <phase_02+0x25> // return 0
+
+  40218e:	add    $0x1,%rcx
+  402192:	cmp    $0x6,%rcx
+  402196:	jne    402173 <phase_02+0x83>
+
+  402198:	jmp    402117 <phase_02+0x27> // return ebx
+```
+
+得到递推：
+```
+res[0] = ((seed >> 13) & 0x3f) ^ 0x1d
+res[i] = (res[i-1] * 3 - i) ^ (((seed >> i) & 0x1f) + 6)
+```
+在 `defuser` 还原该逻辑即可。
+
 ### 使用的工具
 
 Deepseek-V4.1-Flash-1017: 仅提问 x86 汇编语法，与 arm64 的对比（本人先前学过 arm64），没有将本 Lab 中的具体代码拿去提问模型。
