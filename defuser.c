@@ -44,9 +44,22 @@ int solve_phase_2(uint64_t challenge, char *out, size_t cap) {
 
 int solve_phase_3(uint64_t challenge, char *out, size_t cap) {
     uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 0;
-    (void)challenge;
-    // TODO: 根据 phase_03 的汇编，用 challenge 算出口令中的各个整数，依次存入 values，并把 count 改为整数个数。
+    size_t count = 2;
+    
+    values[0] = challenge & 7;
+    uint32_t val = (challenge >> 3) ^ (challenge >> 32);
+    switch (values[0])
+    {
+        case 0: values[1] = val * 3 + 0x3250;            break;
+        case 1: values[1] = (val ^ 0xda8a) + (val >> 1); break;
+        case 2: values[1] = (val * 4) ^ 0xbeea;          break;
+        case 3: values[1] = (val ^ 0x1816) + (val >> 2); break;
+        case 4: values[1] = (val * 4) ^ 0xfaba;          break;
+        case 5: values[1] = val * 5 + 0x25a8;            break;
+        case 6: values[1] = val * 5 + 0x2dc6;            break;
+        case 7: values[1] = val * 5 + 0x2f7ab;           break;
+    }
+
     return write_answer(out, cap, values, count);
 }
 
