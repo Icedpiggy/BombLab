@@ -122,14 +122,14 @@ res[i] = (res[i-1] * 3 - i) ^ (((seed >> i) & 0x1f) + 6)
 <p3_case_7> (val * 4) ^ 0xfaba
 ```
 
-注意到 `notrack jmp *0x405820(,%rax,8)`，需使用 `objdump -s --start-address=0x405820 --stop-address=0x405860 bomb > p3_extra.out` 指令得到跳转地址
+注意到 `notrack jmp *0x405820(,%rax,8)`，需使用 `objdump -s --start-address=0x405820 --stop-address=0x405860 bomb > temp/p3_extra.out` 指令得到跳转地址
 
 ```
 Contents of section .rodata:
- 405820 78224000 00000000 80224000 00000000  x"@......"@.....
- 405830 88224000 00000000 90224000 00000000  ."@......"@.....
- 405840 98224000 00000000 a0224000 00000000  ."@......"@.....
- 405850 68224000 00000000 70224000 00000000  h"@.....p"@.....
+ 405820 78224000 00000000 80224000 00000000
+ 405830 88224000 00000000 90224000 00000000
+ 405840 98224000 00000000 a0224000 00000000
+ 405850 68224000 00000000 70224000 00000000
 ```
 
 经比对，发现 `i = 0 ... 7` 对应 `4 5 1 3 7 0 2 6`，运行 `p3_case_i` 后直接返回到 `phase_03.S` 的 `0x40231e` 继续校验 `out[1]`，不经过 `0x4022a5`
@@ -165,12 +165,12 @@ Contents of section .rodata:
   402355:	mov    %eax,%edi # w0
   402357:	call   402330 <p4_walk> # input (w0, val + 1, w2, w3)
   40235c:	lea    (%rax,%rax,4),%eax
-  40235f:	xor    %ebx,%eax 
+  40235f:	xor    %ebx,%eax
   402361:	mov    -0x8(%rbp),%rbx
   402365:	leave
   402366:	xor    $0x1e,%eax # res = ((res * 5) ^ (val + w3)) ^ 0x1e
   402369:	ret
-  
+
   # w0 < val
   402370:	lea    -0x1(%rdi),%edx # val - 1
   402373:	mov    %eax,%edi # w0
@@ -181,9 +181,9 @@ Contents of section .rodata:
   402383:	leave
   402384:	xor    $0x7,%eax # res = ((res * 5) ^ (val + w3)) ^ 0x7
   402387:	ret
-  
+
   # w0 == val
-  402390:	lea    0xc4(%rdi),%eax 
+  402390:	lea    0xc4(%rdi),%eax
   402396:	xor    %ecx,%eax # res = (w0 + 0xc4) ^ w3
   402398:	ret
 ```
@@ -202,6 +202,82 @@ uint32_t p4_walk(uint32_t w0, uint32_t w1, uint32_t w2, uint32_t w3)
 
 事实上它就是一个在 `[0,0x7f]` 边做二分查找边乘权值的函数，二分次数极少。
 
+#### Phase 5
+
+由 `phase_05.S` 可知 `defuser` 仅输出 2 个 u32，在运行 `ret = p5_traverse(seed, &res)` 后，校验 `out[0] == ret && out[1] == res`
+
+阅读 `p5_traverse.S`，对汇编代码进行分析并注释：
+
+```S
+0000000000402420 <p5_traverse>:
+  402420:	endbr64
+  402424:	mov    %rdi,%rax
+  402427:	mov    %rdi,%rcx
+  40242a:	mov    %rsi,%r8
+  40242d:	and    $0x7,%eax
+  402430:	shr    $0x3,%rcx
+  402434:	mov    0x405b60(,%rax,8),%rdx 
+  # p = (seed & 7) * 8 + 0x405b60 使用 p5_array 后改为 p = p5_array + (seed & 7) * 8
+  # 注意是 mov 而不是 lea，因此需多跳一步
+  40243c:	mov    %rdi,%rax
+  40243f:	shr    $0x20,%rdi
+  402443:	shr    $0x6,%rax
+  402447:	xor    %edi,%eax
+  402449:	mov    0x8(%rdx),%esi
+  40244c:	mov    %ecx,%edi
+  40244e:	xor    $0x60a0,%eax # ret = u32((seed >> 6) ^ (seed >> 32) ^ 0x60a0)
+  402453:	add    0xc(%rdx),%eax
+  402456:	lea    (%rax,%rax,4),%eax
+  402459:	mov    %esi,(%r8) # res = *(p + 0x8)
+  40245c:	xor    %esi,%eax # ret = ((ret + *(p + 0xc)) * 5) ^ *(p + 0x8)
+  40245e:	and    $0x3,%edi # check ((seed >> 3) & 3) == 0
+  402461:	je     402480 <p5_traverse+0x60>
+  402463:	mov    $0x1,%ecx # i = 1
+
+  402468:	mov    (%rdx),%rdx # p = *p 使用 p5_array 后改为 p = p5_array + *p - 0x405b60
+  40246b:	add    $0x1,%ecx # i ++
+  40246e:	mov    0x8(%rdx),%esi
+  402471:	add    0xc(%rdx),%eax
+  402474:	lea    (%rax,%rax,4),%eax
+  402477:	mov    %esi,(%r8) # res = *(p + 0x8)
+  40247a:	xor    %esi,%eax # ret = ((ret + *(p + 0xc)) * 5) ^ *(p + 0x8)
+  40247c:	cmp    %ecx,%edi # check i <= ((seed >> 3) & 3)
+  40247e:	jae    402468 <p5_traverse+0x48>
+
+  402480:	ret
+```
+
+即迭代几次，由于存在 `p = *p` 这种语句，手动即可（当然也可以写代码）探索 p 可能到达的位置，需要将 `0x405b60` 后面的一系列数据导出：
+
+最终需要：`objdump -s --start-address=0x405b60 --stop-address=0x405c60 bomb > temp/p5_extra.out`
+
+```
+Contents of section .rodata:
+ 405b60 405c4000 00000000 b05b4000 00000000
+ 405b70 205c4000 00000000 c05b4000 00000000
+ 405b80 f05b4000 00000000 505c4000 00000000
+ 405b90 005c4000 00000000 e05b4000 00000000
+ 405ba0 00000000 00000000 7c060000 298b0000
+ 405bb0 205c4000 00000000 59020000 16a60000
+ 405bc0 f05b4000 00000000 44090000 351f0000
+ 405bd0 105c4000 00000000 49080000 0c520000
+ 405be0 305c4000 00000000 34070000 57130000
+ 405bf0 505c4000 00000000 42000000 89a10000
+ 405c00 e05b4000 00000000 5b0a0000 ec510000
+ 405c10 a05b4000 00000000 5c050000 4bb40000
+ 405c20 c05b4000 00000000 28030000 66420000
+ 405c30 d05b4000 00000000 1a0b0000 30dd0000
+ 405c40 b05b4000 00000000 4b040000 9b800000
+ 405c50 005c4000 00000000 3f010000 24090000
+```
+
+注意到除了 `405ba0`，可达的每一个地址的后继地址都以 0 结尾，且 `405b98 -> 405be0 -> 405c30 -> 405bd0 -> 405c10 -> 405ba0` 超过 4 次，无需考虑不合法的地址。
+
+把它制为 `uint8_t` 数组 `p5_array`，以后地址应加上 `p5_array` 减去 `0x405b60`，然后使用 `uint8_t *p`，`p = p5_array + *(uint64_t*)p - 0x405b60` 以及 `res = *(uint32_t*)(p + 8)` 等，还原该逻辑即可。
+
+#### Phase 6
+
+#### Honor
 
 ### 使用的工具
 
