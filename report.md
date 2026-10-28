@@ -15,32 +15,32 @@
 0000000000402050 <p1_compute>:
   402050:	endbr64
   402054:	push   %rbp
-  402055:	mov    %rdi,%rax // seed
-  402058:	mov    %rdi,%rdx // seed
-  40205b:	mov    %edi,%r8d // u32(seed)
-  40205e:	shr    $0x20,%rax // seed >> 32
-  402062:	shr    $0x10,%rdx // seed >> 16
-  402066:	mov    %eax,%r9d // seed >> 32
-  402069:	mov    %eax,%esi // seed >> 32
+  402055:	mov    %rdi,%rax # seed
+  402058:	mov    %rdi,%rdx # seed
+  40205b:	mov    %edi,%r8d # u32(seed)
+  40205e:	shr    $0x20,%rax # seed >> 32
+  402062:	shr    $0x10,%rdx # seed >> 16
+  402066:	mov    %eax,%r9d # seed >> 32
+  402069:	mov    %eax,%esi # seed >> 32
   40206b:	mov    %rsp,%rbp
   40206e:	call   402020 <p1_step0>
-  // input (seed, seed >> 32)
-  // output res0 = u32((seed + (seed >> 32) * 8) ^ 0x6ea7)
-  402073:	mov    %rdx,%rsi // seed >> 16
-  402076:	mov    %r9d,%edi // seed >> 32
-  402079:	mov    %eax,%ecx // res0
+  # input (seed, seed >> 32)
+  # output res0 = u32((seed + (seed >> 32) * 8) ^ 0x6ea7)
+  402073:	mov    %rdx,%rsi # seed >> 16
+  402076:	mov    %r9d,%edi # seed >> 32
+  402079:	mov    %eax,%ecx # res0
   40207b:	call   402030 <p1_step1>
-  // input (seed >> 32, seed >> 16)
-  // output res1 = u32(((seed >> 16) + 0x3ea6) ^ (seed >> 32))
-  402080:	mov    %r8d,%esi // u32(seed)
-  402083:	mov    %eax,%edi // res1
+  # input (seed >> 32, seed >> 16)
+  # output res1 = u32(((seed >> 16) + 0x3ea6) ^ (seed >> 32))
+  402080:	mov    %r8d,%esi # u32(seed)
+  402083:	mov    %eax,%edi # res1
   402085:	call   402040 <p1_step2>
-  // input (u32(seed), res1)
-  // output res2 = u32((res1 * 3 + u32(seed)) ^ 0xcae1)
+  # input (u32(seed), res1)
+  # output res2 = u32((res1 * 3 + u32(seed)) ^ 0xcae1)
 
   40208a:	pop    %rbp
   40208b:	xor    %ecx,%eax
-  // res = res2 ^ res0
+  # res = res2 ^ res0
   40208d:	ret
 ```
 
@@ -51,33 +51,33 @@
 由 `phase_02.S` 可知 `defuser` 输出 6 个 u32。对汇编代码进行分析并注释（隐去输入 `out` 的部分）：
 
 ```S
-  // ebx = 1
-  40215a:	mov    %r13,%rax // seed
-  40215d:	mov    -0x40(%rbp),%edx // out[0]
+  # ebx = 1
+  40215a:	mov    %r13,%rax # seed
+  40215d:	mov    -0x40(%rbp),%edx # out[0]
   402160:	shr    $0xd,%rax
   402164:	and    $0x3f,%eax
-  402167:	xor    $0x1d,%eax // res[0] = ((seed >> 13) & 0x3f) ^ 0x1d
-  40216a:	cmp    %eax,%edx // check res[0] == out[0]
-  40216c:	jne    402115 <phase_02+0x25> // return 0
-  40216e:	mov    $0x1,%ecx // 1
+  402167:	xor    $0x1d,%eax # res[0] = ((seed >> 13) & 0x3f) ^ 0x1d
+  40216a:	cmp    %eax,%edx # check res[0] == out[0]
+  40216c:	jne    402115 <phase_02+0x25> # return 0
+  40216e:	mov    $0x1,%ecx # 1
 
-  // for (int i = 1; i != 6; i ++) %rcx 为 i
-  402173:	mov    %r13,%rax // seed
+  # for (int i = 1; i != 6; i ++) %rcx 为 i
+  402173:	mov    %r13,%rax # seed
   402176:	lea    (%rdx,%rdx,2),%edx
   402179:	shr    %cl,%rax
-  40217c:	sub    %ecx,%edx // edx = res[i-1] * 3 - i (此时 out[i-1] == res[i-1] 显然成立)
+  40217c:	sub    %ecx,%edx # edx = res[i-1] * 3 - i (此时 out[i-1] == res[i-1] 显然成立)
   40217e:	and    $0x1f,%eax
-  402181:	add    $0x6,%eax // eax = ((seed >> i) & 0x1f) + 6
-  402184:	xor    %edx,%eax // res[i] = edx ^ eax = (res[i-1] * 3 - i) ^ (((seed >> i) & 0x1f) + 6)
-  402186:	mov    -0x40(%rbp,%rcx,4),%edx // out[i]
-  40218a:	cmp    %eax,%edx // check eax == out[i]
-  40218c:	jne    402115 <phase_02+0x25> // return 0
+  402181:	add    $0x6,%eax # eax = ((seed >> i) & 0x1f) + 6
+  402184:	xor    %edx,%eax # res[i] = edx ^ eax = (res[i-1] * 3 - i) ^ (((seed >> i) & 0x1f) + 6)
+  402186:	mov    -0x40(%rbp,%rcx,4),%edx # out[i]
+  40218a:	cmp    %eax,%edx # check eax == out[i]
+  40218c:	jne    402115 <phase_02+0x25> # return 0
 
   40218e:	add    $0x1,%rcx
   402192:	cmp    $0x6,%rcx
   402196:	jne    402173 <phase_02+0x83>
 
-  402198:	jmp    402117 <phase_02+0x27> // return ebx
+  402198:	jmp    402117 <phase_02+0x27> # return ebx
 ```
 
 得到递推：
@@ -96,10 +96,10 @@ res[i] = (res[i-1] * 3 - i) ^ (((seed >> i) & 0x1f) + 6)
 ```S
 0000000000402250 <p3_dispatch>:
   402250:	endbr64
-  402254:	mov    %edi,%eax // i
-  402256:	mov    %esi,%edi // val
-  402258:	cmp    $0x7,%eax // check i <= 7
-  40225b:	ja     4022a5 <p3_dispatch+0x55> // return 0
+  402254:	mov    %edi,%eax # i
+  402256:	mov    %esi,%edi # val
+  402258:	cmp    $0x7,%eax # check i <= 7
+  40225b:	ja     4022a5 <p3_dispatch+0x55> # return 0
   40225d:	notrack jmp *0x405820(,%rax,8)
   402268:	jmp    4021d0 <p3_case_2>
   402270:	jmp    402220 <p3_case_6>
@@ -133,6 +133,74 @@ Contents of section .rodata:
 ```
 
 经比对，发现 `i = 0 ... 7` 对应 `4 5 1 3 7 0 2 6`，运行 `p3_case_i` 后直接返回到 `phase_03.S` 的 `0x40231e` 继续校验 `out[1]`，不经过 `0x4022a5`
+
+#### Phase 4
+
+由 `phase_04.S` 可知 `defuser` 仅输出 1 个 u32，与 `p4_walk(seed & 0x7f, 0, 0x7f, u32((seed >> 32) ^ (seed >> 7)))` 的结果做比对
+
+阅读 `p4_walk.S`，记 4 个 u32 参数为 `w0 ... w3`，对汇编代码进行分析并注释（隐去 nop）：
+
+```S
+0000000000402330 <p4_walk>:
+  402330:	endbr64
+  402334:	mov    %edi,%eax # w0
+  402336:	mov    %edx,%edi
+  402338:	sub    %esi,%edi
+  40233a:	shr    $1,%edi
+  40233c:	add    %esi,%edi # val = ((w2 - w1) >> 1) + w1
+  40233e:	cmp    %eax,%edi # check w0 == val
+  402340:	je     402390 <p4_walk+0x60>
+
+  402342:	push   %rbp
+  402343:	mov    %rsp,%rbp
+  402346:	push   %rbx
+  402347:	lea    (%rdi,%rcx,1),%ebx # val + w3
+  40234a:	sub    $0x8,%rsp
+
+  40234e:	cmp    %edi,%eax # check w0 < val
+  402350:	jb     402370 <p4_walk+0x40>
+
+  # w0 > val
+  402352:	lea    0x1(%rdi),%esi # val + 1
+  402355:	mov    %eax,%edi # w0
+  402357:	call   402330 <p4_walk> # input (w0, val + 1, w2, w3)
+  40235c:	lea    (%rax,%rax,4),%eax
+  40235f:	xor    %ebx,%eax 
+  402361:	mov    -0x8(%rbp),%rbx
+  402365:	leave
+  402366:	xor    $0x1e,%eax # res = ((res * 5) ^ (val + w3)) ^ 0x1e
+  402369:	ret
+  
+  # w0 < val
+  402370:	lea    -0x1(%rdi),%edx # val - 1
+  402373:	mov    %eax,%edi # w0
+  402375:	call   402330 <p4_walk> # input (w0, w1, val - 1, w3)
+  40237a:	lea    (%rax,%rax,4),%eax
+  40237d:	xor    %ebx,%eax
+  40237f:	mov    -0x8(%rbp),%rbx
+  402383:	leave
+  402384:	xor    $0x7,%eax # res = ((res * 5) ^ (val + w3)) ^ 0x7
+  402387:	ret
+  
+  # w0 == val
+  402390:	lea    0xc4(%rdi),%eax 
+  402396:	xor    %ecx,%eax # res = (w0 + 0xc4) ^ w3
+  402398:	ret
+```
+
+还原为 C 代码：
+
+```c
+uint32_t p4_walk(uint32_t w0, uint32_t w1, uint32_t w2, uint32_t w3)
+{
+    uint32_t val = ((w2 - w1) >> 1) + w1;
+    if (w0 == val) return (w0 + 0xc4) ^ w3;
+    if (w0 > val) return ((p4_walk(w0, val + 1, w2, w3) * 5) ^ (val + w3)) ^ 0x1e;
+    return ((p4_walk(w0, w1, val - 1, w3) * 5) ^ (val + w3)) ^ 0x7;
+}
+```
+
+事实上它就是一个在 `[0,0x7f]` 边做二分查找边乘权值的函数，二分次数极少。
 
 
 ### 使用的工具
