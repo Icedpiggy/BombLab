@@ -145,11 +145,24 @@ int solve_phase_6(uint64_t challenge, char *out, size_t cap) {
 }
 
 int solve_secret(uint64_t challenge, uint64_t context, char *out, size_t cap) {
-    (void)challenge;
-    (void)context;
-    (void)out;
-    (void)cap;
-    // TODO（选做）: 根据 secret_gate、secret_copy 和 secret_phase 的汇编构造完整的第七行，写入 out 后返回 0。
-    // 第七行不一定只有整数，可以直接用 snprintf 写入；还没完成时保持返回 1，测试会显示 not attempted。
-    return 1;
+    // snprintf(out, cap, "%lx %lx", challenge, context);
+    // return 0;
+
+    uint32_t a[3] = {0, 0, 0};
+
+    a[0] = context & 3;
+    uint32_t w = (context >> 16) ^ (a[0] * 0xd260);
+    uint32_t x = (challenge >> 32) ^ challenge ^ (context >> 32) ^ context;
+    uint32_t y = (x >> 1 | x << 31) ^ 0xc383;
+    a[1] = w ^ y;
+    uint32_t z = (uint32_t)((challenge >> 32) ^ challenge) >> 1;
+    a[2] = (z + ((context >> 32) ^ context) + a[0] + 0x11e3) ^ a[1];
+    
+    size_t used = snprintf(out, cap, "01234567890123456789012345678901%c%c%c%c", 0x4f, 0x50, 0x45, 0x4e);
+    for (size_t i = 0; i < 3; ++i) {
+        int size = snprintf(out + used, cap - used, "%s%" PRIu32, i ? " " : "", a[i]);
+        if (size < 0 || (size_t)size >= cap - used) return 1;
+        used += (size_t)size;
+    }
+    return 0;
 }

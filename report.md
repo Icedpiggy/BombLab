@@ -339,6 +339,108 @@ Contents of section .rodata:
 
 #### Honor
 
+可以从 `secret_gate`、`secret_copy` 和 `secret_phase` 开始分析。
+
+`secret_copy` 即将 `p0` 地址的字符串（以 `\0` 结尾）复制到 `p1`。
+
+阅读 `secret_gate.S`，对汇编代码进行分析并注释，省略了一部分：
+
+```S
+  402725:	xor    %eax,%eax
+  402727:	mov    $0x14,%ecx
+  ...
+  40273b:	lea    -0xd0(%rbp),%r12
+  ...
+  402746:	mov    %r12,%rdi
+  ...
+  402750:	rep stos %rax,(%rdi)
+  # 从 %rbp - 0xd0 开始将 20 个 64b 整数置零，即 (%rbp - 0xd0) ~ (%rbp - 0x30) 置零
+  402753:	movl   $0x0,(%rdi)
+  # (%rbp - 0x30) ~ (%rbp - 0x2c) 置零
+  # 即 164 = 0xa4 个 0 字节
+  402759:	mov    %rbx,%rdi
+  # %rdi 为输入字符串 str 的地址
+  40275c:	call   401190 <strlen@plt>
+  402761:	sub    $0x24,%rax
+  402765:	cmp    $0x7f,%rax
+  # check strlen(str) <= 163 = 0xa3
+  402769:	jbe    402780 <secret_gate+0x60>
+
+  40276b ~ 40277c:	return 0
+
+  40277d:	nopl   (%rax)
+  402780:	mov    %rbx,%rsi # str
+  402783:	mov    %r12,%rdi # %rbp - 0xd0
+  402786:	call   402700 <secret_copy>
+  # 字符串复制
+  40278b:	cmpl   $0x4e45504f,-0xb0(%rbp)
+  # check (%rbp - 0xb0) 开始的 4 个字节为 4f 50 45 4e
+  402795:	jne    40276b <secret_gate+0x4b>
+  402797:	mov    %r14,%rdx
+  40279a:	mov    %r13,%rsi
+  40279d:	lea    -0xac(%rbp),%rdi
+  4027a4:	call   402640 <secret_phase>
+  # input (str[0x24:], challenge, context) 下文使用 s0, s1
+  # 前 32 字节貌似没用，接下来 4 个字节校验
+  # 通过 gdb 输出 $rsi $rdx，以及 defuser.c 自定义输出，可以发现 $rsi 为 challenge, %rdx 为 context
+```
+
+阅读 `secret_gate.S`，`str[0x24:]` 中有 3 个 u32，对汇编代码进行分析并注释，省略了一部分：
+
+```S
+  402677:	nopw   0x0(%rax,%rax,1)
+  402680:	xor    %eax,%eax
+  402682:	lea    -0x24(%rbp),%r8
+  402686:	lea    -0x28(%rbp),%rcx
+  40268a:	mov    $0x403183,%esi
+  40268f:	lea    -0x2c(%rbp),%rdx
+  402693:	mov    %rbx,%rdi
+  402696:	call   4011e0 <__isoc99_sscanf@plt>
+  40269b:	cmp    $0x3,%eax
+  40269e:	jne    402668 <secret_phase+0x28>
+
+  4026a0:	mov    %r13d,%ecx
+  4026a3:	xor    %edx,%edx # 0
+  4026a5:	and    $0x3,%ecx # s1 & 3
+  4026a8:	cmp    %ecx,-0x2c(%rbp) # check a[0] == (s1 & 3)
+  4026ab:	jne    40266a <secret_phase+0x2a> # return 0
+
+  4026ad:	mov    %r12,%rsi
+  4026b0:	imul   $0xd260,%ecx,%r9d # u32(a[0] * 0xd260)
+  4026b7:	mov    %r13,%r8
+  4026ba:	shr    $0x20,%rsi
+  4026be:	shr    $0x20,%r8
+  4026c2:	xor    %r12d,%esi # u32((s0 >> 32) ^ s0)
+  4026c5:	xor    %r13d,%r8d # u32((s1 >> 32) ^ s1)
+  4026c8:	shr    $0x10,%r13 # s1 >> 16
+  4026cc:	mov    %esi,%edi # u32((s0 >> 32) ^ s0)
+  4026ce:	xor    %r13d,%r9d # w = u32(s1 >> 16) ^ u32(a[0] * 0xd260)
+  4026d1:	xor    %r8d,%edi # x = u32((s0 >> 32) ^ s0) ^ u32((s1 >> 32) ^ s1)
+  4026d4:	call   402630 <secret_mix> # y = (x >> 1 | x << 31) ^ 0xc383
+  4026d9:	xor    %r9d,%eax
+  4026dc:	cmp    %eax,-0x28(%rbp) # check a[1] == (w ^ y)
+  4026df:	jne    40266a <secret_phase+0x2a>  # return 0
+
+  4026e1:	shr    $1,%esi # z = u32((s0 >> 32) ^ s0) >> 1
+  4026e3:	lea    0x11e3(%r8,%rcx,1),%edx 
+  4026eb:	add    %esi,%edx
+  4026ed:	xor    %edx,%eax
+  4026ef:	cmp    -0x24(%rbp),%eax
+  # check ((z + ((s1 >> 32) ^ s1) + a[0] + 0x11e3) ^ a[1]) == a[2]
+  4026f2:	sete   %dl
+  4026f5:	jmp    40266a <secret_phase+0x2a>
+```
+
+在 `defuser` 还原该逻辑即可。
+
+#### 一些细节
+
+另外，对于 Lab 涉及的所有的 `sscanf` 格式字符串，都只包含 `%u` 与空格，因此无需特殊处理，报告也没有在每个 Phase 说明这件事。
+
 ### 使用的工具
 
-Deepseek-V4.1-Flash-1017: 仅提问 x86 汇编语法，与 arm64 的对比（本人先前学过 arm64），没有将本 Lab 中的具体代码拿去提问模型。
+- objdump 离线分析，导出编辑器与数据。
+
+- gdb 在线调试。
+
+- Deepseek-V4.1-Flash-1017: 仅提问 x86 汇编语法，与 arm64 的对比（本人先前学过 arm64），没有将本 Lab 中的具体代码拿去提问模型。
