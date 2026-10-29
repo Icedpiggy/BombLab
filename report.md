@@ -136,7 +136,7 @@ Contents of section .rodata:
 
 #### Phase 4
 
-由 `phase_04.S` 可知 `defuser` 仅输出 1 个 u32，与 `p4_walk(seed & 0x7f, 0, 0x7f, u32((seed >> 32) ^ (seed >> 7)))` 的结果做比对
+由 `phase_04.S` 可知 `defuser` 仅输出 1 个 u32，与 `p4_walk(seed & 0x7f, 0, 0x7f, u32((seed >> 32) ^ (seed >> 7)))` 的结果做比较
 
 阅读 `p4_walk.S`，记 4 个 u32 参数为 `w0 ... w3`，对汇编代码进行分析并注释（隐去 nop）：
 
@@ -216,7 +216,7 @@ uint32_t p4_walk(uint32_t w0, uint32_t w1, uint32_t w2, uint32_t w3)
   40242a:	mov    %rsi,%r8
   40242d:	and    $0x7,%eax
   402430:	shr    $0x3,%rcx
-  402434:	mov    0x405b60(,%rax,8),%rdx 
+  402434:	mov    0x405b60(,%rax,8),%rdx
   # p = (seed & 7) * 8 + 0x405b60 使用 p5_array 后改为 p = p5_array + (seed & 7) * 8
   # 注意是 mov 而不是 lea，因此需多跳一步
   40243c:	mov    %rdi,%rax
@@ -276,6 +276,66 @@ Contents of section .rodata:
 把它制为 `uint8_t` 数组 `p5_array`，以后地址应加上 `p5_array` 减去 `0x405b60`，然后使用 `uint8_t *p`，`p = p5_array + *(uint64_t*)p - 0x405b60` 以及 `res = *(uint32_t*)(p + 8)` 等，还原该逻辑即可。
 
 #### Phase 6
+
+由 `phase_06.S` 可知 `defuser` 仅输出 1 个 u32，与 `p6_dispatch(seed)` 的结果做比较
+
+阅读 `p6_dispatch.S`，对汇编代码进行分析并注释：
+
+```S
+0000000000402580 <p6_dispatch>:
+  402580:	endbr64
+  402584:	push   %rbp
+  402585:	mov    %rsp,%rbp
+  402588:	push   %rbx
+  402589:	mov    %rdi,%rbx # seed
+  40258c:	shr    $0x6,%rdi # seed >> 6
+  402590:	mov    %rbx,%rax # seed
+  402593:	shr    $0x20,%rax # seed >> 32
+  402597:	xor    %eax,%edi # u32((seed >> 6) ^ (seed >> 32))
+  402599:	mov    %rbx,%rax # seed
+  40259c:	sub    $0x8,%rsp
+  4025a0:	and    $0x38,%ebx # seed & 0x38
+  4025a3:	and    $0x7,%eax # seed & 7
+  4025a6:	call   *0x405e00(,%rax,8)
+  # call *(0x405e00 + (seed & 7) * 8)
+  # input u32((seed >> 6) ^ (seed >> 32))
+  # output r1
+  4025ad:	xor    $0xb379,%eax
+  4025b2:	mov    %eax,%edi
+  4025b4:	call   *0x405e00(%rbx)
+  # call *(0x405e00 + (seed & 0x38))
+  # input (r1 ^ 0xb379)
+  # output r2
+  4025ba:	mov    -0x8(%rbp),%rbx
+  4025be:	leave
+  4025bf:	add    $0xd9dc,%eax # res = r2 + 0xd9dc
+  4025c4:	ret
+```
+
+函数地址的数组位于 `0x405e00 - 0x405e40`，导出：
+
+`objdump -s --start-address=0x405e00 --stop-address=0x405e40 bomb > temp/p6_extra.out`
+
+```
+Contents of section .rodata:
+ 405e00 50254000 00000000 60254000 00000000
+ 405e10 70254000 00000000 40254000 00000000
+ 405e20 70254000 00000000 20254000 00000000
+ 405e30 40254000 00000000 00254000 00000000
+```
+
+8 个地址，6 个子函数，地址从低到高为 `p6_op_0 ... p6_op_5`，8 个地址对应 `3 4 5 2 5 1 2 0`，每个函数输入 1 个参数 `val` 做简单计算，对汇编代码进行分析得到：
+
+```
+402500 <p6_op_0>: ((x >> 5) + 0xd6b3) ^ (x * 3)
+402520 <p6_op_1>: ((x >> 2) ^ x) + 0xc053
+402540 <p6_op_2>: (x ^ 0x3b2d) + x * 4
+402550 <p6_op_3>: x >> 5 | (x & 0x1f) << 27
+402560 <p6_op_4>: (x << 1 | x >> 31) ^ 0x3046
+402570 <p6_op_5>: (x + 0x5f12) ^ (x >> 5)
+```
+
+在 `defuser` 还原该逻辑即可。
 
 #### Honor
 
