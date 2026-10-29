@@ -4,6 +4,15 @@
 
 ### 运行结果截图
 
+#### 公开列表
+
+![public_test.png](assets/public_test.png)
+
+#### 其他种子
+
+![seed_9.png](assets/seed_9.png)
+
+![enhance.png](assets/enhance.png)
 
 ### 思路
 
@@ -327,10 +336,10 @@ Contents of section .rodata:
 8 个地址，6 个子函数，地址从低到高为 `p6_op_0 ... p6_op_5`，8 个地址对应 `3 4 5 2 5 1 2 0`，每个函数输入 1 个参数 `val` 做简单计算，对汇编代码进行分析得到：
 
 ```
-402500 <p6_op_0>: ((x >> 5) + 0xd6b3) ^ (x * 3)
+402500 <p6_op_0>: ((x << 5) + 0xd6b3) ^ (x * 3)
 402520 <p6_op_1>: ((x >> 2) ^ x) + 0xc053
 402540 <p6_op_2>: (x ^ 0x3b2d) + x * 4
-402550 <p6_op_3>: x >> 5 | (x & 0x1f) << 27
+402550 <p6_op_3>: x >> 5 | x << 27
 402560 <p6_op_4>: (x << 1 | x >> 31) ^ 0x3046
 402570 <p6_op_5>: (x + 0x5f12) ^ (x >> 5)
 ```
@@ -381,7 +390,7 @@ Contents of section .rodata:
   40279d:	lea    -0xac(%rbp),%rdi
   4027a4:	call   402640 <secret_phase>
   # input (str[0x24:], challenge, context) 下文使用 s0, s1
-  # 前 32 字节貌似没用，接下来 4 个字节校验
+  # 前 32 字节没用，任意填 ASCII 文本，接下来 4 个字节校验
   # 通过 gdb 输出 $rsi $rdx，以及 defuser.c 自定义输出，可以发现 $rsi 为 challenge, %rdx 为 context
 ```
 

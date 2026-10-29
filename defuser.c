@@ -120,14 +120,14 @@ uint32_t p6_op(uint32_t x, uint32_t op)
 {
     switch (op)
     {
-        case 0: return x >> 5 | (x & 0x1f) << 27;
+        case 0: return x >> 5 | x << 27;
         case 1: return (x << 1 | x >> 31) ^ 0x3046;
         case 2: return (x + 0x5f12) ^ (x >> 5);
         case 3: return (x ^ 0x3b2d) + x * 4;
         case 4: return (x + 0x5f12) ^ (x >> 5);
         case 5: return ((x >> 2) ^ x) + 0xc053;
         case 6: return (x ^ 0x3b2d) + x * 4;
-        case 7: return ((x >> 5) + 0xd6b3) ^ (x * 3);
+        case 7: return ((x << 5) + 0xd6b3) ^ (x * 3);
     }
     return 0;
 }
